@@ -1,0 +1,244 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+
+    "Description" : "Single node MongoDB deployment with a RAID10 storage configuration",
+
+    "Parameters" : {
+        "KeyName" : {
+            "Description" : "Name of an existing EC2 KeyPair to enable SSH access",
+            "Type" : "String" 
+        },
+
+        "InstanceType" : {
+            "Type" : "String", 
+            "Default" : "t1.micro", 
+            "AllowedValues" : [ "t1.micro", "m1.small","m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "c1.xlarge", "cc1.4xlarge" ],
+            "Description" : "EC2 instance type (e.g. m1.large, m1.xlarge, m2.xlarge)"
+        },
+
+        "VolumeSize" : {
+            "Description" : "Volume size for each EBS volume",
+            "Type" : "Number",
+            "Default" : "10"
+        },
+		
+		"MongoConfig1" : {
+            "Description" : "Private IP for MongoDB Config Server",
+            "Type" : "String"
+        },
+		
+		"MongoConfig2" : {
+            "Description" : "Private IP for MongoDB Config Server",
+            "Type" : "String"
+        },
+
+		"MongoConfig3" : {
+            "Description" : "Private IP for MongoDB Config Server",
+            "Type" : "String"
+        }
+    },
+
+    "Mappings" : {
+        "InstanceTypeArch" : {
+			"t1.micro"    : { "Arch" : "64" },
+            "m1.small"    : { "Arch" : "64" },
+            "m1.medium"   : { "Arch" : "64" },
+            "m1.large"    : { "Arch" : "64" },
+            "m1.xlarge"   : { "Arch" : "64" },
+            "m2.xlarge"   : { "Arch" : "64" },
+            "m2.2xlarge"  : { "Arch" : "64" },
+            "m2.4xlarge"  : { "Arch" : "64" },
+            "c1.medium"   : { "Arch" : "64" },
+            "c1.xlarge"   : { "Arch" : "64" },
+            "cc1.4xlarge" : { "Arch" : "64HVM" }
+        },
+
+       	"RegionImageZone" : {
+            "us-east-1"      : { "64" : "ami-9c78c0f5", "64HVM" : "ami-9078c0f9" },
+            "us-west-2"      : { "64" : "ami-7eab224e", "64HVM" : "ami-60ab2250" },
+            "us-west-1"      : { "64" : "ami-bb4f69fe", "64HVM" : "NOT_YET_SUPPORTED" },
+            "eu-west-1"      : { "64" : "ami-3b65664f", "64HVM" : "ami-25656651" },
+            "ap-southeast-1" : { "64" : "ami-fefcbcac", "64HVM" : "NOT_YET_SUPPORTED" },
+            "ap-northeast-1" : { "64" : "ami-eca719ed", "64HVM" : "NOT_YET_SUPPORTED" },
+            "sa-east-1"      : { "64" : "ami-b45b82a9", "64HVM" : "NOT_YET_SUPPORTED" }
+        }
+    },
+
+    "Resources" : {
+        "MongoSecurityGroup" : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "MongoDB security group",
+                "SecurityGroupIngress" : [ 
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : "22",
+                        "ToPort" : "22",
+                        "CidrIp" : "0.0.0.0/0"
+                    }
+                ]
+            }
+        },
+
+        "MongodIngress" : {
+            "Type" : "AWS::EC2::SecurityGroupIngress",
+            "Properties" : {
+                "GroupName" : { "Ref" : "MongoSecurityGroup" },
+                "IpProtocol" : "tcp",
+                "FromPort" : "27017",
+                "ToPort" : "27017",
+                "SourceSecurityGroupName" : { "Ref" : "MongoSecurityGroup" }
+            }
+        },
+
+        "StatusIngress" : {
+            "Type" : "AWS::EC2::SecurityGroupIngress",
+            "Properties" : {
+                "GroupName" : { "Ref" : "MongoSecurityGroup" },
+                "IpProtocol" : "tcp",
+                "FromPort" : "28017",
+                "ToPort" : "28017",
+                "SourceSecurityGroupName" : { "Ref" : "MongoSecurityGroup" }
+            }
+        },
+
+        "CfnUser" : {
+            "Type" : "AWS::IAM::User",
+            "Properties" : {
+                "Path": "/",
+                "Policies": [ {
+                    "PolicyName": "root",
+                    "PolicyDocument": { "Statement": [ {
+                        "Effect":"Allow",
+                        "Action":"cloudformation:DescribeStackResource",
+                        "Resource":"*"
+                    } ] }
+                } ]
+            }
+        },
+
+        "HostKeys" : {
+            "Type" : "AWS::IAM::AccessKey",
+            "Properties" : {
+                "UserName" : { "Ref" : "CfnUser" }
+            }
+        },
+
+        "MongoRouter" : {
+            "Type" : "AWS::EC2::Instance",
+            "Metadata" : {
+                "AWS::CloudFormation::Init" : {
+                    "config" : {
+                        "packages" : {
+                        }
+                    }
+                }
+            },
+
+            "Properties" : {
+                "InstanceType" : { "Ref" : "InstanceType" },
+                "ImageId" : { "Fn::FindInMap" : [ "RegionImageZone", { "Ref" : "AWS::Region" }, 
+                    { "Fn::FindInMap" : [ "InstanceTypeArch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+                "SecurityGroups" : [ { "Ref" : "MongoSecurityGroup" } ],
+                "KeyName" : { "Ref" : "KeyName" },
+				"Tags" : [
+          			{"Key" : "Name", "Value" : "MongoDB" },
+          			{"Key" : "Owner", "Value" : "inetgiant" }
+        		],
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+                    "#!/bin/bash\n",
+
+                    "function error_exit\n",
+                    "{\n",
+                    "  cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandleMongoRouter" }, "'\n",
+                    "  exit 1\n",
+                    "}\n",
+
+                    "## add mongo gpg key\n",
+                    "apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
+                    "echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' >> /etc/apt/sources.list\n",
+                    
+                    "apt-get -y update >> /tmp/cfn-init.log 2>&1\n",
+                    
+                    "DEBIAN_FRONTEND=noninteractive apt-get -y install mdadm sysstat lvm2 mongodb-10gen >> /tmp/apt.log 2>&1\n",
+                    "service mongodb stop\n",
+                    
+                    "apt-get -y install python-setuptools\n",
+                    "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+                    
+                    "## Initialize CloudFormation bits\n",
+                    "cfn-init -v -s ", { "Ref" : "AWS::StackName" }, " -r MongoRouter",
+                    "   --access-key ",  { "Ref" : "HostKeys" },
+                    "   --secret-key ", {"Fn::GetAtt": ["HostKeys", "SecretAccessKey"]},
+                    "   --region ", { "Ref" : "AWS::Region" }, " >> /tmp/cfn-init.log 2>&1 || error_exit $(</tmp/cfn-init.log)\n",
+
+                    "mkdir /data\n",
+                    "mkdir /log\n",
+                    "mkdir /journal\n",
+
+                    "chown -R mongodb:mongodb /data > /tmp/chown1.log 2>&1\n",
+                    "chown -R mongodb:mongodb /log > /tmp/chown2.log 2>&1\n",
+                    "chown -R mongodb:mongodb /journal > /tmp/chown3.log 2>&1\n",
+
+                    "## Update mongod configuration\n",
+					"mv /etc/init/mongodb.conf /etc/init/mongodb.conf.BAK\n",
+                    "cat <<EOF > /etc/init/mongodb.conf\n",
+                    "# Ubuntu upstart file at /etc/init/mongodb.conf\n",
+					"\n",
+					"limit nofile 20000 20000\n",
+					"/n",
+					"kill timeout 300 # wait 300s between SIGTERM and SIGKILL.\n",
+					"/n",
+					"auth=true\n",
+					"/n",
+					"pre-start script\n",
+					"    mkdir -p /var/lib/mongodb/\n",
+					"    mkdir -p /var/log/mongodb/\n",
+					"end script\n",
+					"/n",
+					"start on runlevel [2345]\n",
+					"stop on runlevel [06]\n",
+					"\n",
+					"script\n",
+					"  ENABLE_MONGODB=\"yes\"\n",
+					"  if [ -f /etc/default/mongodb ]; then . /etc/default/mongodb; fi\n",
+					"  if [ \"x$ENABLE_MONGODB\" = \"xyes\" ]; then exec start-stop-daemon --start --quiet --chuid mongodb --exec  /usr/bin/mongod -- --configdb", { "Ref" : "MongoConfig1" }, " ", { "Ref" : "MongoConfig2" }, " ", { "Ref" : "MongoConfig3" }, "; fi\n",
+					"end script/n",
+                    "EOF\n",
+					
+					"## Raise file descriptor limits\n",
+					"echo '* hard nofile 100000' | tee -a /etc/security/limits.conf\n",
+					"echo '* soft nofile 100000' | tee -a /etc/security/limits.conf\n",
+					"ulimit -n 100000\n",
+					
+                    "## Start mongod\n",
+                    "service mongodb start > /tmp/mongod-start.log 2>&1\n",
+
+                    "## CloudFormation signal that setup is complete\n",
+                    "cfn-signal -e 0 -r \"MongoRouter setup complete\" '", { "Ref" : "WaitHandleMongoRouter" }, "'\n"
+                ] ] } }
+            }
+        },
+
+        "WaitHandleMongoRouter" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle",
+            "Properties" : {}
+        },
+
+        "WaitConditionMongoRouter" : {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn" : "MongoRouter", 
+            "Properties" : {
+                "Handle" : { "Ref" : "WaitHandleMongoRouter" },
+                "Timeout" : "3000"
+            }
+        }
+    },
+
+    "Outputs" : {
+        "InstanceName" : {
+            "Value" : { "Fn::GetAtt" : [ "MongoRouter", "PublicDnsName" ] },
+            "Description" : "public DNS name of the new MongoRouter"
+        }
+    }
+}

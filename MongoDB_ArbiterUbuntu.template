@@ -1,0 +1,152 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+
+    "Description" : "MongoDb Arbiter deployment",
+
+    "Parameters" : {
+        "KeyName" : {
+            "Description" : "Name of an existing EC2 KeyPair to enable SSH access",
+            "Type" : "String" 
+        },
+        
+        "ArbiterInstanceType" : {
+            "Type" : "String", 
+            "Default" : "t1.micro", 
+            "AllowedValues" : [ "t1.micro", "m1.small", "m1.medium", "m1.large" ],
+            "Description" : "Arbiter EC2 instance type (e.g. t1.micro, m1.small,..)"
+        },
+        
+        "ReplicaSetName" : {
+            "Description" : "Name for the MongoDB replica set",
+            "Type" : "String",
+            "Default" : "MyReplicaSet"
+        },
+        
+        "AccessKeyId" : {
+            "Description" : "Access Key ID",
+            "Type" : "String"
+        },
+
+        "SecretAccessKey" : {
+            "Description" : "Secret Access Key for the specified Access Key ID",
+            "Type" : "String"
+        },
+
+        "SecurityGroupName" : {
+            "Description" : "MongoDB replica set security group name",
+            "Type" : "String"
+        }
+    },
+
+    "Mappings" : {
+        "InstanceTypeArch" : {
+        	"t1.micro"    : { "Arch" : "64" },
+            "m1.small"    : { "Arch" : "64" },
+            "m1.medium"   : { "Arch" : "64" },
+            "m1.large"    : { "Arch" : "64" },
+            "m1.xlarge"   : { "Arch" : "64" },
+            "m2.xlarge"   : { "Arch" : "64" },
+            "m2.2xlarge"  : { "Arch" : "64" },
+            "m2.4xlarge"  : { "Arch" : "64" },
+            "c1.medium"   : { "Arch" : "64" },
+            "c1.xlarge"   : { "Arch" : "64" },
+            "cc1.4xlarge" : { "Arch" : "64HVM" }
+        },
+
+        "RegionImageZone" : {
+            "us-east-1"      : { "64" : "ami-9c78c0f5", "64HVM" : "ami-9078c0f9" },
+            "us-west-2"      : { "64" : "ami-7eab224e", "64HVM" : "ami-60ab2250" },
+            "us-west-1"      : { "64" : "ami-bb4f69fe", "64HVM" : "NOT_YET_SUPPORTED" },
+            "eu-west-1"      : { "64" : "ami-3b65664f", "64HVM" : "ami-25656651" },
+            "ap-southeast-1" : { "64" : "ami-fefcbcac", "64HVM" : "NOT_YET_SUPPORTED" },
+            "ap-northeast-1" : { "64" : "ami-eca719ed", "64HVM" : "NOT_YET_SUPPORTED" },
+            "sa-east-1"      : { "64" : "ami-b45b82a9", "64HVM" : "NOT_YET_SUPPORTED" }
+        }
+    },
+
+    "Resources" : {
+        "MongoArbiter" : {
+            "Type" : "AWS::EC2::Instance",
+            "Metadata" : {
+                "AWS::CloudFormation::Init" : {
+                    "config" : {
+                        "packages" : {
+                            
+                        }
+                    }
+                }
+            },
+
+            "Properties" : {
+                "InstanceType" : { "Ref" : "ArbiterInstanceType" },
+                "Tags" : [
+          			{"Key" : "Name", "Value" : "MongoArbiter" },
+          			{"Key" : "Owner", "Value" : "inetgiant" }
+        		],
+                "ImageId" : { "Fn::FindInMap" : [ "RegionImageZone", { "Ref" : "AWS::Region" }, 
+                    { "Fn::FindInMap" : [ "InstanceTypeArch", { "Ref" : "ArbiterInstanceType" }, "Arch" ] } ] },
+                "SecurityGroups" : [ { "Ref" : "SecurityGroupName" } ],
+                "KeyName" : { "Ref" : "KeyName" },
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+                    "#!/bin/bash\n",
+
+                    "function error_exit\n",
+                    "{\n",
+                    "  cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandleMongoArbiter" }, "'\n",
+                    "  exit 1\n",
+                    "}\n",
+
+                    "## add mongo gpg key\n",
+                    "apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
+                    "echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' >> /etc/apt/sources.list\n",
+                    
+                    "apt-get -y update >> /tmp/cfn-init.log 2>&1\n",
+                    
+                    "DEBIAN_FRONTEND=noninteractive apt-get -y install mdadm sysstat lvm2 mongodb-10gen >> /tmp/apt.log 2>&1\n",
+                    "service mongodb stop\n",
+                    
+                    "apt-get -y install python-setuptools\n",
+                    "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+
+                    "## Initialize CloudFormation bits\n",
+                    "cfn-init -v -s ", { "Ref" : "AWS::StackName" }, " -r MongoArbiter",
+                    "   --access-key ",  { "Ref" : "AccessKeyId" },
+                    "   --secret-key ", {"Ref": "SecretAccessKey" },
+                    "   --region ", { "Ref" : "AWS::Region" }, " > /tmp/cfn-init.log 2>&1 || error_exit $(</tmp/cfn-init.log)\n",
+                    
+                    "echo '/mnt/var/lib/mongodb /var/lib/mongodb   none bind' | tee -a /etc/fstab\n",
+                    "echo '/mnt/var/log/mongodb /var/log/mongodb   none bind' | tee -a /etc/fstab\n",
+                    
+                    "echo 'replSet=", { "Ref" : "ReplicaSetName" } ,"' | tee -a /etc/mongod.conf\n",
+
+                    "## Start mongod\n",
+                    "service mongodb start > /tmp/mongod-start.log 2>&1\n",
+
+                    "## CloudFormation signal that setup is complete\n",
+                    "cfn-signal -e 0 -r \"MongoArbiter setup complete\" '", { "Ref" : "WaitHandleMongoArbiter" }, "'\n"
+                ] ] } }
+            }
+        },
+
+        "WaitHandleMongoArbiter" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle",
+            "Properties" : {}
+        },
+
+        "WaitConditionMongoArbiter" : {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn" : "MongoArbiter",
+            "Properties" : {
+                "Handle" : { "Ref" : "WaitHandleMongoArbiter" },
+                "Timeout" : "3000"
+            }
+        }
+    },
+
+    "Outputs" : {
+        "ArbiterInstanceName" : {
+            "Value" : { "Fn::GetAtt" : [ "MongoArbiter", "PublicDnsName" ] },
+            "Description" : "public DNS name of the new MongoArbiter"
+        }
+    }
+}

@@ -1,0 +1,174 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+
+    "Description" : "Mongo Monitoring Server deployment",
+
+    "Parameters" : {
+        "KeyName" : {
+            "Description" : "Name of an existing EC2 KeyPair to enable SSH access",
+            "Type" : "String" 
+        },
+
+        "InstanceType" : {
+            "Type" : "String", 
+            "Default" : "t1.micro", 
+            "AllowedValues" : [ "t1.micro", "m1.small", "m1.medium", "m1.large" ],
+            "Description" : "EC2 instance type (e.g. t1.micro, m1.small, m1.medium, m1.large)"
+        },
+
+        "SecurityGroupName" : {
+            "Description" : "MongoMonitoringServer security group name",
+            "Type" : "String"
+        },
+        
+        "MMSApiKey" : {
+            "Description" : "MMS API KEY",
+            "Type" : "String"
+        },
+        
+        "MMSSecretKey" : {
+            "Description" : "MMS Secret Key",
+            "Type" : "String"
+        }
+    },
+
+    "Mappings" : {
+        "InstanceTypeArch" : {
+        	"t1.micro"    : { "Arch" : "64" },
+            "m1.small"    : { "Arch" : "64" },
+            "m1.medium"   : { "Arch" : "64" },
+            "m1.large"    : { "Arch" : "64" },
+            "m1.xlarge"   : { "Arch" : "64" },
+            "m2.xlarge"   : { "Arch" : "64" },
+            "m2.2xlarge"  : { "Arch" : "64" },
+            "m2.4xlarge"  : { "Arch" : "64" },
+            "c1.medium"   : { "Arch" : "64" },
+            "c1.xlarge"   : { "Arch" : "64" },
+            "cc1.4xlarge" : { "Arch" : "64HVM" }
+        },
+
+        "RegionImageZone" : {
+            "us-east-1"      : { "64" : "ami-9c78c0f5", "64HVM" : "ami-9078c0f9" },
+            "us-west-2"      : { "64" : "ami-7eab224e", "64HVM" : "ami-60ab2250" },
+            "us-west-1"      : { "64" : "ami-bb4f69fe", "64HVM" : "NOT_YET_SUPPORTED" },
+            "eu-west-1"      : { "64" : "ami-3b65664f", "64HVM" : "ami-25656651" },
+            "ap-southeast-1" : { "64" : "ami-fefcbcac", "64HVM" : "NOT_YET_SUPPORTED" },
+            "ap-northeast-1" : { "64" : "ami-eca719ed", "64HVM" : "NOT_YET_SUPPORTED" },
+            "sa-east-1"      : { "64" : "ami-b45b82a9", "64HVM" : "NOT_YET_SUPPORTED" }
+        }
+    },
+
+    "Resources" : {
+    	
+    	"CfnUser" : {
+            "Type" : "AWS::IAM::User",
+            "Properties" : {
+                "Path": "/",
+                "Policies": [ {
+                    "PolicyName": "root",
+                    "PolicyDocument": { "Statement": [ {
+                        "Effect":"Allow",
+                        "Action":"cloudformation:DescribeStackResource",
+                        "Resource":"*"
+                    } ] }
+                } ]
+            }
+        },
+
+        "AccessKey" : {
+            "Type" : "AWS::IAM::AccessKey",
+            "Properties" : {
+                "UserName" : { "Ref" : "CfnUser" }
+            }
+        },
+		
+        "MongoMonitoringServer" : {
+            "Type" : "AWS::EC2::Instance",
+            "Metadata" : {
+                "AWS::CloudFormation::Init" : {
+                    "config" : {
+                        "packages" : {
+                        }
+                    }
+                }
+            },
+
+            "Properties" : {
+                "InstanceType" : { "Ref" : "InstanceType" },
+                "ImageId" : { "Fn::FindInMap" : [ "RegionImageZone", { "Ref" : "AWS::Region" }, 
+                    { "Fn::FindInMap" : [ "InstanceTypeArch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+                "SecurityGroups" : [ { "Ref" : "SecurityGroupName" } ],
+                "KeyName" : { "Ref" : "KeyName" },
+				"Tags" : [
+          			{"Key" : "Name", "Value" : "MongoMonitoringServer" },
+          			{"Key" : "Owner", "Value" : "inetgiant" }
+        		],
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+                    "#!/bin/bash\n",
+
+                    "function error_exit\n",
+                    "{\n",
+                    "  cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandleMongoMonitoringServer" }, "'\n",
+                    "  exit 1\n",
+                    "}\n",
+
+                    "## add mongo gpg key\n",
+                    "apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
+                    "echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' >> /etc/apt/sources.list\n",
+                    
+                    "apt-get -y update >> /tmp/cfn-init.log 2>&1\n",
+                    
+                    "DEBIAN_FRONTEND=noninteractive apt-get -y install unzip >> /tmp/apt.log 2>&1\n",
+                    
+                    "apt-get -y install python-setuptools\n",
+                    "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+                    
+                    "## Initialize CloudFormation bits\n",
+                    "cfn-init -v -s ", { "Ref" : "AWS::StackName" }, " -r MongoMonitoringServer",
+                    "   --access-key ",  { "Ref" : "AccessKey" },
+                    "   --secret-key ", {"Fn::GetAtt": ["AccessKey", "SecretAccessKey"]},
+                    "   --region ", { "Ref" : "AWS::Region" }, " > /tmp/cfn-init.log 2>&1 || error_exit $(</tmp/cfn-init.log)\n",
+                    
+                    "mkdir /opt/mss\n",
+					"easy_install pymongo\n",
+					
+					"wget https://mms.10gen.com/settings/10gen-mms-agent.zip\n",
+					"mv 10gen-mms-agent.zip /opt/mss/\n",
+					"cd /opt/mss/\n",
+					"unzip 10gen-mms-agent.zip\n",
+					"cd mms-agent\n",
+					"mkdir logs\n",
+					
+					"sed -i s/@API_KEY@/", { "Ref" : "MMSApiKey" } ,"/g settings.py\n",
+					"sed -i s/@SECRET_KEY@/", { "Ref" : "MMSSecretKey" } ,"/g settings.py\n",
+					
+					"nohup python agent.py > logs/agent.log 2>&1 &",
+					
+                    "## CloudFormation signal that setup is complete\n",
+                    "cfn-signal -e 0 -r \"MongoMonitoringServer setup complete\" '", { "Ref" : "WaitHandleMongoMonitoringServer" }, "'\n"
+                ] ] } }
+            }
+        },
+
+        "WaitHandleMongoMonitoringServer" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle",
+            "Properties" : {}
+        },
+
+        "WaitConditionMongoMonitoringServer" : {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn" : "MongoMonitoringServer",
+            "Properties" : {
+                "Handle" : { "Ref" : "WaitHandleMongoMonitoringServer" },
+                "Timeout" : "300"
+            }
+        }
+    },
+
+    "Outputs" : {
+        "InstanceName" : {
+            "Value" : { "Fn::GetAtt" : [ "MongoMonitoringServer", "PublicDnsName" ] },
+            "Description" : "public DNS name of the new MongoMonitoringServer"
+        }
+    }
+}
