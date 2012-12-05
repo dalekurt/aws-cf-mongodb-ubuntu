@@ -20,6 +20,11 @@
             "Description" : "Volume size for each EBS volume",
             "Type" : "Number",
             "Default" : "10"
+        },
+
+		"SecurityGroupName" : {
+            "Description" : "MongoDB replica set security group name",
+            "Type" : "String"
         }
     },
 
@@ -123,7 +128,7 @@
                 "InstanceType" : { "Ref" : "InstanceType" },
                 "ImageId" : { "Fn::FindInMap" : [ "RegionImageZone", { "Ref" : "AWS::Region" }, 
                     { "Fn::FindInMap" : [ "InstanceTypeArch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
-                "SecurityGroups" : [ { "Ref" : "MongoSecurityGroup" } ],
+                "SecurityGroups" : [ { "Ref" : "SecurityGroupName" } ],
                 "KeyName" : { "Ref" : "KeyName" },
 				"Tags" : [
           			{"Key" : "Name", "Value" : "MongoDB" },

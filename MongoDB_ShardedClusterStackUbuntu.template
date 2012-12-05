@@ -11,8 +11,8 @@
 
         "InstanceType" : {
             "Type" : "String", 
-            "Default" : "m1.small", 
-            "AllowedValues" : [ "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "c1.xlarge", "cc1.4xlarge" ],
+            "Default" : "t1.micro", 
+            "AllowedValues" : [ "t1.micro", "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "c1.xlarge", "cc1.4xlarge" ],
             "Description" : "EC2 instance type (e.g. m1.large, m1.xlarge, m2.xlarge)"
         },
 
@@ -26,12 +26,18 @@
             "Description" : "Name for the MongoDB replica set",
             "Type" : "String",
             "Default" : "MyReplicaSet"
+        },
+
+		"SecurityGroupName" : {
+            "Description" : "MongoDB replica set security group name",
+            "Type" : "String"
         }
     },
 
     "Mappings" : {
         "InstanceTypeArch" : {
-            "m1.small"    : { "Arch" : "64" },
+            "t1.micro"    : { "Arch" : "64" },
+			"m1.small"    : { "Arch" : "64" },
             "m1.medium"   : { "Arch" : "64" },
             "m1.large"    : { "Arch" : "64" },
             "m1.xlarge"   : { "Arch" : "64" },
@@ -135,7 +141,7 @@
                     "AccessKeyId" : { "Ref" : "AccessKey" },
                     "SecretAccessKey" : {"Fn::GetAtt": ["AccessKey", "SecretAccessKey"]},
                     "ReplicaSetName" : { "Ref" : "ReplicaSetName" },
-                    "SecurityGroupName" : { "Ref" : "MongoSecurityGroup" },
+                    "SecurityGroupName" : { "Ref" : "SecurityGroupName" },
                     "InstanceZone" : { "Fn::FindInMap" : ["RegionZone", { "Ref" : "AWS::Region"}, "AZ2"] }
                 }
             }
@@ -153,7 +159,7 @@
                     "AccessKeyId" : { "Ref" : "AccessKey" },
                     "SecretAccessKey" : {"Fn::GetAtt": ["AccessKey", "SecretAccessKey"]},
                     "ReplicaSetName" : { "Ref" : "ReplicaSetName" },
-                    "SecurityGroupName" : { "Ref" : "MongoSecurityGroup" },
+                    "SecurityGroupName" : { "Ref" : "SecurityGroupName" },
                     "InstanceZone" : { "Fn::FindInMap" : ["RegionZone", { "Ref" : "AWS::Region"}, "AZ3"] }
                 }
             }
@@ -171,7 +177,7 @@
                     "AccessKeyId" : { "Ref" : "AccessKey" },
                     "SecretAccessKey" : {"Fn::GetAtt": ["AccessKey", "SecretAccessKey"]},
                     "ReplicaSetName" : { "Ref" : "ReplicaSetName" },
-                    "SecurityGroupName" : { "Ref" : "MongoSecurityGroup" },
+                    "SecurityGroupName" : { "Ref" : "SecurityGroupName" },
                     "InstanceZone" : { "Fn::FindInMap" : ["RegionZone", { "Ref" : "AWS::Region"}, "AZ3"] }
                 }
             }
