@@ -217,6 +217,7 @@
                     "   exit 1\n",
                     "}\n",
                     
+					"sudo su -\n"
                     "## add mongo gpg key\n",
                     "apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
                     "echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' >> /etc/apt/sources.list\n",
@@ -256,9 +257,9 @@
                     "dd if=/dev/zero of=/dev/md0 bs=512 count=1\n",
                     "pvcreate /dev/md0\n",
                     "vgcreate vg0 /dev/md0\n",
-                    "lvcreate -l 90%vg -n data vg0\n",
+                    "lvcreate -l 85%vg -n data vg0\n",
                     "lvcreate -l 5%vg -n log vg0\n",
-                    "lvcreate -l 5%vg -n journal vg0\n",
+                    "lvcreate -l 10%vg -n journal vg0\n",
 
                     "## Create filesystems and mount point info\n",
                     "mke2fs -t ext4 -F /dev/vg0/data > /tmp/mke2fs1.log 2>&1\n",
@@ -294,7 +295,7 @@
                     "EOF\n",
 
                     "## Start mongod to pick up new conf\n",
-                    "service mongodb start > /tmp/mongod-start.log 2>&1\n",
+                    "service mongod start > /tmp/mongod-start.log 2>&1\n",
 
                     "## Waiting until mongod has started\n",
                     "sleep 120\n",

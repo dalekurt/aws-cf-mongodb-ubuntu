@@ -171,9 +171,9 @@
                     "dd if=/dev/zero of=/dev/md0 bs=512 count=1\n",
                     "pvcreate /dev/md0\n",
                     "vgcreate vg0 /dev/md0\n",
-                    "lvcreate -l 90%vg -n data vg0\n",
+                    "lvcreate -l 85%vg -n data vg0\n",
                     "lvcreate -l 5%vg -n log vg0\n",
-                    "lvcreate -l 5%vg -n journal vg0\n",
+                    "lvcreate -l 10%vg -n journal vg0\n",
 
                     "## Create filesystems and mount point info\n",
                     "mke2fs -t ext4 -F /dev/vg0/data > /tmp/mke2fs1.log 2>&1\n",
