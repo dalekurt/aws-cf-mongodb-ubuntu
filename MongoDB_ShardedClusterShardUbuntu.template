@@ -117,14 +117,16 @@
                     "}\n",
 
                     "## add mongo gpg key\n",
-                    "apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
-                    "echo echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' | tee -a /etc/apt/sources.list.d/10gen.list >> /etc/apt/sources.list\n",
-                    "apt-get -y update >> /tmp/cfn-init.log 2>&1\n",
-					"apt-get purge mongodb-10gen\n",
-                    "DEBIAN_FRONTEND=noninteractive apt-get -y install mdadm sysstat lvm2 mongodb-10gen >> /tmp/apt.log 2>&1\n",
-                    "service mongodb stop\n",
+                    "sudo apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
+                    "sudo echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' | sudo tee -a /etc/apt/sources.list.d/10gen.list >> /etc/apt/sources.list\n",
+                    "sudo apt-get -y update >> /tmp/cfn-init.log 2>&1\n",
+					
+                    "DEBIAN_FRONTEND=noninteractive sudo apt-get -y install mdadm sysstat lvm2 >> /tmp/apt.log 2>&1\n",
+					
+					"sudo apt-get -y install mongodb-10gen\n",
+                    "sudo service mongodb stop\n",
 
-                    "apt-get -y install python-setuptools\n",
+                    "sudo apt-get -y install python-setuptools\n",
                     "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
                     
                     "## Initialize CloudFormation bits\n",

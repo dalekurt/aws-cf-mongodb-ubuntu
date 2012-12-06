@@ -217,7 +217,6 @@
                     "   exit 1\n",
                     "}\n",
                     
-					"sudo su -\n"
                     "## add mongo gpg key\n",
                     "apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 >> /tmp/cfn-init.log 2>&1\n",
                     "echo 'deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen' >> /etc/apt/sources.list\n",
